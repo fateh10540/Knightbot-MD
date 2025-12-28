@@ -1,74 +1,42 @@
 const fetch = require('node-fetch');
 
-async function lyricsCommand(sock, chatId, songTitle) {
+async function lyricsCommand(sock, chatId, songTitle, message) {
     if (!songTitle) {
         await sock.sendMessage(chatId, { 
-            text: '🔍 Please enter the song name to get the lyrics! Usage: *lyrics <song name>*',
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363161513685998@newsletter',
-                    newsletterName: 'KnightBot MD',
-                    serverMessageId: -1
-                }
-            }
-        });
+            text: '🔍 Please enter the song name to get the lyrics! Usage: *lyrics <song name>*'
+        },{ quoted: message });
         return;
     }
 
     try {
-        // Fetch song lyrics using the API
-        let res = await fetch(`https://some-random-api.com/lyrics?title=${encodeURIComponent(songTitle)}`);
-        if (!res.ok) throw await res.text();
+        // Use lyricsapi.fly.dev and return only the raw lyrics text
+        const apiUrl = `https://lyricsapi.fly.dev/api/lyrics?q=${encodeURIComponent(songTitle)}`;
+        const res = await fetch(apiUrl);
         
-        let json = await res.json();
-        
-        if (!json.thumbnail.genius) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Sorry, I couldn\'t find any lyrics for this song!',
-                contextInfo: {
-                    forwardingScore: 999,
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363161513685998@newsletter',
-                        newsletterName: 'KnightBot MD',
-                        serverMessageId: -1
-                    }
-                }
-            });
-            return;
+        if (!res.ok) {
+            const errText = await res.text();
+            throw errText;
         }
         
-        // Sending the formatted result to the user
-        await sock.sendMessage(chatId, {
-            image: { url: json.thumbnail.genius },
-            caption: `🎵 *Song Lyrics* 🎶\n\n▢ *Title:* ${json.title}\n*Artist:* ${json.author}\n\n📜 *Lyrics:*\n${json.lyrics}\n\nHope you enjoy the music! 🎧 🎶`,
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363161513685998@newsletter',
-                    newsletterName: 'KnightBot MD',
-                    serverMessageId: -1
-                }
-            }
-        });
+        const data = await res.json();
 
+        const lyrics = data && data.result && data.result.lyrics ? data.result.lyrics : null;
+        if (!lyrics) {
+            await sock.sendMessage(chatId, {
+                text: `❌ Sorry, I couldn't find any lyrics for "${songTitle}".`
+            },{ quoted: message });
+            return;
+        }
+
+        const maxChars = 4096;
+        const output = lyrics.length > maxChars ? lyrics.slice(0, maxChars - 3) + '...' : lyrics;
+
+        await sock.sendMessage(chatId, { text: output }, { quoted: message });
     } catch (error) {
         console.error('Error in lyrics command:', error);
         await sock.sendMessage(chatId, { 
-            text: '❌ Sorry, I couldn\'t fetch the lyrics. Please try again later!',
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363161513685998@newsletter',
-                    newsletterName: 'KnightBot MD',
-                    serverMessageId: -1
-                }
-            }
-        });
+            text: `❌ An error occurred while fetching the lyrics for "${songTitle}".`
+        },{ quoted: message });
     }
 }
 
